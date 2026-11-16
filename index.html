@@ -133,7 +133,6 @@
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
 
@@ -163,7 +162,6 @@
         let moveDir = { x: 0, z: 0 }, isDraggingLook = false, prevTouch = { x: 0, y: 0 }, camRotX = 0;
         let lookTouchId = null;
 
-        // Світ збільшено в 2 рази (було 200x260 -> стало 400x520)
         const areaWidth = 400;
         const areaLength = 520;
         const housePos = new THREE.Vector3(64, 0, -50);
@@ -210,8 +208,7 @@
             floor.rotation.x = -Math.PI / 2;
             scene.add(floor);
 
-            buildNewMap();
-            scatterGrass();
+            buildProceduralMap();
             generateChestnuts();
 
             player = new THREE.Object3D();
@@ -238,67 +235,77 @@
             return false;
         }
 
-        function buildNewMap() {
-            const loader = new THREE.GLTFLoader();
-
-            // Будинок
-            loader.load('./house.glb', (gltf) => {
-                const house = gltf.scene;
-                house.position.copy(housePos);
-                house.scale.set(6, 6, 6);
-                scene.add(house);
-            }, undefined, () => {
-                const houseGroup = new THREE.Group();
-                const walls = new THREE.Mesh(
-                    new THREE.BoxGeometry(28, 10, 22),
-                    new THREE.MeshStandardMaterial({ color: 0xa0522d, roughness: 0.85 })
-                );
-                walls.position.y = 5;
-                houseGroup.add(walls);
-
-                const roof = new THREE.Mesh(
-                    new THREE.ConeGeometry(21, 8, 4),
-                    new THREE.MeshStandardMaterial({ color: 0x5c2614, roughness: 0.9 })
-                );
-                roof.position.y = 14;
-                roof.rotation.y = Math.PI / 4;
-                houseGroup.add(roof);
-
-                houseGroup.position.copy(housePos);
-                scene.add(houseGroup);
-            });
-
-            // Скриня біля дому
-            const chest = new THREE.Mesh(
-                new THREE.BoxGeometry(2.2, 1.4, 1.4),
-                new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6 })
+        function buildProceduralMap() {
+            // 1. Будинок
+            const houseGroup = new THREE.Group();
+            const walls = new THREE.Mesh(
+                new THREE.BoxGeometry(24, 9, 20),
+                new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 })
             );
-            chest.position.set(housePos.x - 14, 0.7, housePos.z);
-            scene.add(chest);
+            walls.position.y = 4.5;
+            houseGroup.add(walls);
 
-            // Комп'ютер для покращень (всередині/біля будинку)
+            const roof = new THREE.Mesh(
+                new THREE.ConeGeometry(18, 7, 4),
+                new THREE.MeshStandardMaterial({ color: 0x4a2e18, roughness: 0.9 })
+            );
+            roof.position.y = 12.5;
+            roof.rotation.y = Math.PI / 4;
+            houseGroup.add(roof);
+
+            houseGroup.position.copy(housePos);
+            scene.add(houseGroup);
+
+            // 2. Нормальна деталізована скриня (не просто куб)
+            const chestGroup = new THREE.Group();
+            const chestBody = new THREE.Mesh(
+                new THREE.BoxGeometry(2.2, 1.2, 1.4),
+                new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.6 })
+            );
+            chestBody.position.y = 0.6;
+            chestGroup.add(chestBody);
+            
+            const chestLid = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.7, 0.7, 2.2, 16, 1, false, 0, Math.PI),
+                new THREE.MeshStandardMaterial({ color: 0x422814, roughness: 0.5 })
+            );
+            chestLid.rotation.z = Math.PI / 2;
+            chestLid.position.set(0, 1.2, 0);
+            chestGroup.add(chestLid);
+
+            const lock = new THREE.Mesh(
+                new THREE.BoxGeometry(0.3, 0.4, 0.2),
+                new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.8, roughness: 0.2 })
+            );
+            lock.position.set(0, 0.9, 0.71);
+            chestGroup.add(lock);
+
+            chestGroup.position.set(housePos.x - 14, 0, housePos.z);
+            scene.add(chestGroup);
+
+            // 3. Комп'ютер для покращень
             const pcDesk = new THREE.Mesh(
-                new THREE.BoxGeometry(2.5, 1.2, 1.5),
-                new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 })
+                new THREE.BoxGeometry(2.5, 1.1, 1.4),
+                new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4 })
             );
-            pcDesk.position.set(housePos.x + 8, 0.6, housePos.z);
+            pcDesk.position.set(housePos.x + 8, 0.55, housePos.z);
             scene.add(pcDesk);
 
             const monitor = new THREE.Mesh(
-                new THREE.BoxGeometry(1.4, 0.9, 0.2),
-                new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x004488, emissiveIntensity: 0.5 })
+                new THREE.BoxGeometry(1.3, 0.8, 0.15),
+                new THREE.MeshStandardMaterial({ color: 0x050505, emissive: 0x0066cc, emissiveIntensity: 0.6 })
             );
-            monitor.position.set(housePos.x + 8, 1.7, housePos.z);
+            monitor.position.set(housePos.x + 8, 1.6, housePos.z);
             scene.add(monitor);
 
-            // Доріжки
-            const pathMat = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.92 });
+            // 4. Доріжки
+            const pathMat = new THREE.MeshStandardMaterial({ color: 0x6e4726, roughness: 0.95 });
             const mainPath = new THREE.Mesh(new THREE.PlaneGeometry(9, 310), pathMat);
             mainPath.rotation.x = -Math.PI / 2;
             mainPath.position.set(0, 0.02, 100);
             scene.add(mainPath);
 
-            // Хвіртка
+            // 5. Хвіртка
             const gatePostMat = new THREE.MeshStandardMaterial({ color: 0x3b2612 });
             const gateDoorMat = new THREE.MeshStandardMaterial({ color: 0xd4a017 });
             const post1 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 5, 1.2), gatePostMat);
@@ -309,7 +316,7 @@
             gate.position.set(0, 2, 256);
             scene.add(post1, post2, gate);
 
-            // Ставок
+            // 6. Ставок
             const shore = new THREE.Mesh(
                 new THREE.RingGeometry(pondRadius - 1, pondRadius + 4, 32),
                 new THREE.MeshStandardMaterial({ color: 0x8c7355, roughness: 1 })
@@ -326,7 +333,7 @@
             pond.position.set(pondPos.x, 0.04, pondPos.z);
             scene.add(pond);
 
-            // Паркан по периметру
+            // 7. Паркан по периметру
             const fenceMat = new THREE.MeshStandardMaterial({ color: 0x4a3319, roughness: 0.9 });
             const createFence = (w, h, d, x, y, z) => {
                 const f = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), fenceMat);
@@ -338,11 +345,11 @@
             createFence(1.2, 4, areaLength, -areaWidth / 2, 2, 0);
             createFence(1.2, 4, areaLength, areaWidth / 2, 2, 0);
 
-            // Дерева
-            const treeCount = 120;
-            const trunkGeo = new THREE.CylinderGeometry(0.8, 1.3, 10, 7);
+            // 8. Зменшені, акуратні дерева
+            const treeCount = 100;
+            const trunkGeo = new THREE.CylinderGeometry(0.5, 0.8, 6, 6);
             const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4d3319, roughness: 0.9 });
-            const crownGeo = new THREE.DodecahedronGeometry(6.5, 1);
+            const crownGeo = new THREE.DodecahedronGeometry(4.0, 1);
             const crownMat = new THREE.MeshStandardMaterial({ color: 0x1e4d18, roughness: 0.8 });
 
             const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
@@ -350,20 +357,20 @@
             const dummy = new THREE.Object3D();
 
             let placed = 0, attempts = 0;
-            while (placed < treeCount && attempts < 1000) {
+            while (placed < treeCount && attempts < 800) {
                 attempts++;
                 let tx = (Math.random() - 0.5) * (areaWidth - 30);
                 let tz = (Math.random() - 0.5) * (areaLength - 30);
                 if (isZoneBlocked(tx, tz, 8)) continue;
 
-                const s = 0.9 + Math.random() * 0.6;
-                dummy.position.set(tx, 5 * s, tz);
+                const s = 0.8 + Math.random() * 0.4;
+                dummy.position.set(tx, 3 * s, tz);
                 dummy.scale.set(s, s, s);
                 dummy.rotation.y = Math.random() * Math.PI;
                 dummy.updateMatrix();
                 trunks.setMatrixAt(placed, dummy.matrix);
 
-                dummy.position.set(tx, 12 * s, tz);
+                dummy.position.set(tx, 7.5 * s, tz);
                 dummy.updateMatrix();
                 crowns.setMatrixAt(placed, dummy.matrix);
                 placed++;
@@ -371,49 +378,7 @@
             scene.add(trunks, crowns);
         }
 
-        function scatterGrass() {
-            const loader = new THREE.GLTFLoader();
-            const populateGrassModel = (url, count, baseScale) => {
-                loader.load(url, (gltf) => {
-                    let grassGeo = null, grassMat = null;
-                    gltf.scene.traverse((child) => {
-                        if (child.isMesh && !grassGeo) {
-                            grassGeo = child.geometry;
-                            grassMat = child.material;
-                        }
-                    });
-                    if (!grassGeo) return;
-
-                    const instancedGrass = new THREE.InstancedMesh(grassGeo, grassMat, count);
-                    const dummy = new THREE.Object3D();
-                    let idx = 0, tries = 0;
-
-                    while (idx < count && tries < count * 3) {
-                        tries++;
-                        const gx = (Math.random() - 0.5) * (areaWidth - 10);
-                        const gz = (Math.random() - 0.5) * (areaLength - 10);
-                        if (isZoneBlocked(gx, gz, 1)) continue;
-
-                        const scale = baseScale * (0.7 + Math.random() * 0.7);
-                        dummy.position.set(gx, 0, gz);
-                        dummy.rotation.y = Math.random() * Math.PI * 2;
-                        dummy.scale.set(scale, scale, scale);
-                        dummy.updateMatrix();
-                        instancedGrass.setMatrixAt(idx, dummy.matrix);
-                        idx++;
-                    }
-                    instancedGrass.count = idx;
-                    instancedGrass.instanceMatrix.needsUpdate = true;
-                    scene.add(instancedGrass);
-                });
-            };
-
-            populateGrassModel('./Grass_Common_Tall.glb', 15000, 1.0);
-            populateGrassModel('./Grass_Common_Short.glb', 25000, 1.0);
-        }
-
         function generateChestnuts() {
-            // Зменшено розмір каштанів (радіус сферы зменшено з 0.07 до 0.035)
             const geom = new THREE.SphereGeometry(0.035, 6, 6);
             const mat = new THREE.MeshStandardMaterial({ color: 0x7c471b, roughness: 0.45 });
             
@@ -616,7 +581,7 @@
                 player.position.z = newZ;
             }
 
-            // Збір каштанів з миттєвим оновленням UI
+            // Збір каштанів з миттєвим видаленням з карти та оновленням UI в реальному часі
             if (inventory < maxInventory) {
                 let collectedAny = false;
                 for (let i = 0; i < chestnutData.length; i++) {
@@ -655,7 +620,6 @@
                 pcBtn.style.display = "none";
             }
 
-            // Час уповільнено вдвічі (швидкість збільшення зменшена з 0.15 до 0.075)
             gameTime += 0.075;
             if (gameTime >= 1440) gameTime = 0;
             const h = Math.floor(gameTime / 60), m = Math.floor(gameTime % 60);
