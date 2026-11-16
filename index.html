@@ -44,6 +44,26 @@
         }
         #fatigue-bar { width: 100%; height: 100%; background: #4CAF50; transition: width 0.2s; }
 
+        /* Приціл-хрестовина по центру екрана */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 16px;
+            height: 16px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 10;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 4px rgba(0,0,0,0.8);
+        }
+        #crosshair::before { top: 7px; left: 0; width: 16px; height: 2px; }
+        #crosshair::after { top: 0; left: 7px; width: 2px; height: 16px; }
+
         .movable-btn {
             position: absolute;
             color: white;
@@ -64,7 +84,7 @@
             border: 1px solid rgba(255,255,255,0.3);
         }
         
-        /* Кнопка-рука для збору каштанів (розміщена вище правої сторони) */
+        /* Кнопка-рука у верхній правій частині */
         #btn-collect {
             display: none;
             position: absolute;
@@ -109,6 +129,61 @@
             bottom: 85px;
             background: linear-gradient(135deg, #1976D2, #2196F3);
             border: 2px solid #90CAF9;
+        }
+
+        /* Дерево навичок (Модальне вікно комп'ютера) */
+        #skills-modal {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 85%;
+            max-width: 480px;
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(10px);
+            border: 2px solid #3b82f6;
+            border-radius: 16px;
+            padding: 20px;
+            color: white;
+            z-index: 100;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+        #skills-modal h2 { margin-top: 0; font-size: 18px; text-align: center; color: #60a5fa; }
+        .skill-item {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .skill-info div:first-child { font-weight: bold; font-size: 14px; }
+        .skill-info div:last-child { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+        .skill-btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .skill-btn:active { transform: scale(0.95); background: #1d4ed8; }
+        #close-modal {
+            width: 100%;
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 5px;
         }
 
         #toast {
@@ -165,12 +240,33 @@
         <div>У руках: <b><span id="inventory-display">0</span> / <span id="max-inv-display">5</span></b></div>
     </div>
 
+    <!-- Дерево навичок (комп'ютер) -->
+    <div id="skills-modal">
+        <h2>💻 Дерево навичок ПК</h2>
+        <div class="skill-item">
+            <div class="skill-info">
+                <div>Місткість кишень</div>
+                <div id="skill-inv-desc">Збільшити ліміт інвентарю (+5)</div>
+            </div>
+            <button class="skill-btn" onclick="upgradeInventorySkill()">Вивчити</button>
+        </div>
+        <div class="skill-item">
+            <div class="skill-info">
+                <div>Енергозбереження</div>
+                <div id="skill-energy-desc">Повільніше витрачається бадьорість</div>
+            </div>
+            <button class="skill-btn" onclick="upgradeEnergySkill()">Вивчити</button>
+        </div>
+        <button id="close-modal" onclick="closeSkillsModal()">Закрити</button>
+    </div>
+
+    <div id="crosshair"></div>
     <div id="toast"></div>
 
-    <button id="btn-collect" onclick="collectNearbyChestnut()">✋</button>
+    <button id="btn-collect" onclick="collectTargetedChestnut()">✋</button>
     <button class="movable-btn" id="btn-bag" onclick="placeBag()">Поставити мішок</button>
     <button id="btn-action" class="action-btn" onclick="throwIntoChest()">Здати в скриню</button>
-    <button id="btn-pc" class="action-btn" onclick="openPCUpgrades()">Комп'ютер (Покращення)</button>
+    <button id="btn-pc" class="action-btn" onclick="openSkillsModal()">Комп'ютер (Навички)</button>
 
     <div id="joystick-zone">
         <div id="joystick-thumb"></div>
@@ -180,19 +276,23 @@
         let scene, camera, renderer, player;
         let bags = [];
         let money = 0, acorns = 3, inventory = 0, maxInventory = 5, gameTime = 8 * 60, energy = 100;
+        let energyEfficiencyLevel = 0;
         let moveDir = { x: 0, z: 0 }, isDraggingLook = false, prevTouch = { x: 0, y: 0 }, camRotX = 0;
         let lookTouchId = null;
+        let isModalOpen = false;
 
         const areaWidth = 400;
         const areaLength = 520;
         const housePos = new THREE.Vector3(64, 0, -50);
+        const chestPos = new THREE.Vector3(housePos.x - 14, 0, housePos.z);
+        const pcPos = new THREE.Vector3(housePos.x + 8, 0, housePos.z);
         const pondPos = new THREE.Vector3(-96, 0, 20);
         const pondRadius = 44;
 
         let chestnutInstances;
         const totalChestnuts = 35000;
         let chestnutData = [];
-        let nearestChestnutIndex = -1;
+        let targetedChestnutIndex = -1;
 
         loadGameData();
         init();
@@ -223,7 +323,6 @@
             dirLight.position.set(200, 400, 250);
             scene.add(dirLight);
 
-            // Трава (земля) з гарним текстурним відтінком
             const floor = new THREE.Mesh(
                 new THREE.PlaneGeometry(areaWidth, areaLength),
                 new THREE.MeshStandardMaterial({ color: 0x336b1d, roughness: 0.9 })
@@ -279,7 +378,7 @@
             houseGroup.position.copy(housePos);
             scene.add(houseGroup);
 
-            // Повноцінна красива скриня здачі каштанів
+            // Скриня здачі
             const chestGroup = new THREE.Group();
             const chestBody = new THREE.Mesh(
                 new THREE.BoxGeometry(2.4, 1.3, 1.5),
@@ -303,23 +402,25 @@
             lock.position.set(0, 0.95, 0.76);
             chestGroup.add(lock);
 
-            chestGroup.position.set(housePos.x - 14, 0, housePos.z);
+            chestGroup.position.copy(chestPos);
             scene.add(chestGroup);
 
-            // Комп'ютер для прокачки навичок
+            // Комп'ютер
             const pcDesk = new THREE.Mesh(
                 new THREE.BoxGeometry(2.5, 1.1, 1.4),
                 new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4 })
             );
-            pcDesk.position.set(housePos.x + 8, 0.55, housePos.z);
-            scene.add(pcDesk);
-
+            pcDesk.position.set(0, 0.55, 0);
             const monitor = new THREE.Mesh(
                 new THREE.BoxGeometry(1.3, 0.8, 0.15),
                 new THREE.MeshStandardMaterial({ color: 0x050505, emissive: 0x0066cc, emissiveIntensity: 0.7 })
             );
-            monitor.position.set(housePos.x + 8, 1.6, housePos.z);
-            scene.add(monitor);
+            monitor.position.set(0, 1.6, 0);
+            
+            const pcGroup = new THREE.Group();
+            pcGroup.add(pcDesk, monitor);
+            pcGroup.position.copy(pcPos);
+            scene.add(pcGroup);
 
             // Доріжки
             const pathMat = new THREE.MeshStandardMaterial({ color: 0x6e4726, roughness: 0.95 });
@@ -368,7 +469,7 @@
             createFence(1.2, 4, areaLength, -areaWidth / 2, 2, 0);
             createFence(1.2, 4, areaLength, areaWidth / 2, 2, 0);
 
-            // Дерева (більше кількості, тонкі стовбури, гарна висота)
+            // Дерева
             const treeCount = 180;
             const trunkGeo = new THREE.CylinderGeometry(0.35, 0.5, 8, 6);
             const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4d3319, roughness: 0.9 });
@@ -402,7 +503,6 @@
         }
 
         function generateChestnuts() {
-            // Трохи збільшений розмір каштанів (радіус 0.05)
             const geom = new THREE.SphereGeometry(0.05, 6, 6);
             const mat = new THREE.MeshStandardMaterial({ color: 0x7c471b, roughness: 0.45 });
             
@@ -435,7 +535,7 @@
         }
 
         function saveGameData() {
-            const data = { money, acorns, maxInventory, energy };
+            const data = { money, acorns, maxInventory, energy, energyEfficiencyLevel };
             localStorage.setItem('cleanItUpAloneSave', JSON.stringify(data));
         }
 
@@ -447,6 +547,7 @@
                 acorns = data.acorns || 3;
                 maxInventory = data.maxInventory || 5;
                 energy = data.energy || 100;
+                energyEfficiencyLevel = data.energyEfficiencyLevel || 0;
             }
         }
 
@@ -491,33 +592,68 @@
             showToast(`Здано ${totalToProcess} шт. Зароблено: $${earned.toFixed(2)}!`);
         }
 
-        function openPCUpgrades() {
+        // Керування деревом навичок (комп'ютером)
+        function openSkillsModal() {
+            isModalOpen = true;
+            document.getElementById('skills-modal').style.display = 'block';
+            updateSkillModalTexts();
+        }
+
+        function closeSkillsModal() {
+            isModalOpen = false;
+            document.getElementById('skills-modal').style.display = 'none';
+        }
+
+        function updateSkillModalTexts() {
+            let invCost = maxInventory * 15;
+            document.getElementById('skill-inv-desc').textContent = `Збільшити ліміт інвентарю (+5) | Ціна: $${invCost.toFixed(2)}`;
+            
+            let energyCost = (energyEfficiencyLevel + 1) * 25;
+            document.getElementById('skill-energy-desc').textContent = `Рівень ${energyEfficiencyLevel} | Ціна: $${energyCost.toFixed(2)}`;
+        }
+
+        function upgradeInventorySkill() {
             let cost = maxInventory * 15;
             if (money >= cost) {
                 money -= cost;
                 maxInventory += 5;
                 updateUI();
                 saveGameData();
-                showToast(`Навички покращено! Макс. інвентар: ${maxInventory}`, "#4CAF50");
+                updateSkillModalTexts();
+                showToast(`Навичку кишень вивчено! Макс. інвентар: ${maxInventory}`, "#4CAF50");
+            } else {
+                showToast(`Не вистачає грошей! Потрібно: $${cost.toFixed(2)}`, "#f44336");
+            }
+        }
+
+        function upgradeEnergySkill() {
+            let cost = (energyEfficiencyLevel + 1) * 25;
+            if (money >= cost) {
+                money -= cost;
+                energyEfficiencyLevel++;
+                updateUI();
+                saveGameData();
+                updateSkillModalTexts();
+                showToast(`Енергозбереження покращено (Рівень ${energyEfficiencyLevel})!`, "#4CAF50");
             } else {
                 showToast(`Не вистачає грошей! Потрібно: $${cost.toFixed(2)}`, "#f44336");
             }
         }
 
         const dummyMatrix = new THREE.Object3D();
-        function collectNearbyChestnut() {
-            if (nearestChestnutIndex !== -1 && inventory < maxInventory) {
-                let c = chestnutData[nearestChestnutIndex];
+        function collectTargetedChestnut() {
+            if (targetedChestnutIndex !== -1 && inventory < maxInventory) {
+                let c = chestnutData[targetedChestnutIndex];
                 c.collected = true;
                 inventory++;
 
                 dummyMatrix.position.set(0, -999, 0);
                 dummyMatrix.scale.set(0, 0, 0);
                 dummyMatrix.updateMatrix();
-                chestnutInstances.setMatrixAt(nearestChestnutIndex, dummyMatrix.matrix);
+                chestnutInstances.setMatrixAt(targetedChestnutIndex, dummyMatrix.matrix);
                 chestnutInstances.instanceMatrix.needsUpdate = true;
 
-                nearestChestnutIndex = -1;
+                targetedChestnutIndex = -1;
                 document.getElementById('btn-collect').style.display = 'none';
                 updateUI();
             }
@@ -566,6 +702,7 @@
             zone.addEventListener('touchcancel', resetJoy);
 
             window.addEventListener('touchstart', (e) => {
+                if (isModalOpen) return;
                 for (let t of e.changedTouches) {
                     if (t.clientX > window.innerWidth * 0.35 && t.clientX < window.innerWidth - 80 && lookTouchId === null) {
                         lookTouchId = t.identifier;
@@ -576,7 +713,7 @@
             });
 
             window.addEventListener('touchmove', (e) => {
-                if (!isDraggingLook) return;
+                if (!isDraggingLook || isModalOpen) return;
                 for (let t of e.changedTouches) {
                     if (t.identifier === lookTouchId) {
                         player.rotation.y -= (t.clientX - prevTouch.x) * 0.0055;
@@ -607,7 +744,12 @@
             document.getElementById('fatigue-bar').style.width = energy + "%";
         }
 
+        const raycaster = new THREE.Raycaster();
+        const screenCenter = new THREE.Vector2(0, 0);
+
         function updateGameLogic() {
+            if (isModalOpen) return;
+
             const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
             const right = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
             
@@ -623,39 +765,49 @@
                 player.position.z = newZ;
             }
 
-            // Пошук найближчого каштана для збору по кнопці-руці
-            nearestChestnutIndex = -1;
+            // Збір каштанів прицілом-хрестовиною
+            targetedChestnutIndex = -1;
             if (inventory < maxInventory) {
-                let minDist = 2.0; // радіус досяжності кнопки збору
+                raycaster.setFromCamera(screenCenter, camera);
+                let closestDist = 3.5;
                 for (let i = 0; i < chestnutData.length; i++) {
                     let c = chestnutData[i];
                     if (!c.collected) {
-                        let d = Math.hypot(player.position.x - c.x, player.position.z - c.z);
-                        if (d < minDist) {
-                            minDist = d;
-                            nearestChestnutIndex = i;
+                        let distToPlayer = Math.hypot(player.position.x - c.x, player.position.z - c.z);
+                        if (distToPlayer < 4.0) {
+                            let dirToChestnut = new THREE.Vector3(c.x - player.position.x, 0, c.z - player.position.z).normalize();
+                            let playerLookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
+                            let dot = playerLookDir.dot(dirToChestnut);
+                            
+                            if (dot > 0.65 && distToPlayer < closestDist) {
+                                closestDist = distToPlayer;
+                                targetedChestnutIndex = i;
+                            }
                         }
                     }
                 }
             }
 
             const collectBtn = document.getElementById('btn-collect');
-            if (nearestChestnutIndex !== -1 && inventory < maxInventory) {
+            if (targetedChestnutIndex !== -1 && inventory < maxInventory) {
                 collectBtn.style.display = "flex";
             } else {
                 collectBtn.style.display = "none";
             }
 
-            // Інтерактивні кнопки біля будинку (скриня та комп'ютер)
+            // Зони скрині та комп'ютера
             const actionBtn = document.getElementById('btn-action');
             const pcBtn = document.getElementById('btn-pc');
             
-            if (player.position.distanceTo(housePos) < 16.0) {
+            if (player.position.distanceTo(chestPos) < 5.5) {
                 actionBtn.style.display = "block";
-                pcBtn.style.display = "block";
-                pcBtn.textContent = `Комп'ютер (Ціна: $${(maxInventory * 15).toFixed(2)})`;
             } else {
                 actionBtn.style.display = "none";
+            }
+
+            if (player.position.distanceTo(pcPos) < 5.0) {
+                pcBtn.style.display = "block";
+            } else {
                 pcBtn.style.display = "none";
             }
 
