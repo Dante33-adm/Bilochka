@@ -226,7 +226,6 @@
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
 
@@ -329,7 +328,7 @@
             floor.rotation.x = -Math.PI / 2;
             scene.add(floor);
 
-            buildEnvironment();
+            buildProceduralEnvironment();
             generateChestnuts();
 
             player = new THREE.Object3D();
@@ -356,27 +355,26 @@
             return false;
         }
 
-        function buildEnvironment() {
-            const loader = new THREE.GLTFLoader();
+        function buildProceduralEnvironment() {
+            // 1. Будинок
+            const houseGroup = new THREE.Group();
+            const walls = new THREE.Mesh(
+                new THREE.BoxGeometry(24, 9, 20),
+                new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 })
+            );
+            walls.position.y = 4.5;
+            houseGroup.add(walls);
 
-            // 1. Завантаження твого будинку (Fantasy Inn)
-            loader.load('./Fantasy Inn by Quaternius - vUJjr....glb', (gltf) => {
-                const house = gltf.scene;
-                house.position.copy(housePos);
-                house.scale.set(4, 4, 4);
-                scene.add(house);
-            }, undefined, () => {
-                // Резервний будинок якщо файл не знайдено
-                const houseGroup = new THREE.Group();
-                const walls = new THREE.Mesh(
-                    new THREE.BoxGeometry(24, 9, 20),
-                    new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 })
-                );
-                walls.position.y = 4.5;
-                houseGroup.add(walls);
-                houseGroup.position.copy(housePos);
-                scene.add(houseGroup);
-            });
+            const roof = new THREE.Mesh(
+                new THREE.ConeGeometry(18, 7, 4),
+                new THREE.MeshStandardMaterial({ color: 0x4a2e18, roughness: 0.9 })
+            );
+            roof.position.y = 12.5;
+            roof.rotation.y = Math.PI / 4;
+            houseGroup.add(roof);
+
+            houseGroup.position.copy(housePos);
+            scene.add(houseGroup);
 
             // 2. Скриня здачі
             const chestGroup = new THREE.Group();
@@ -467,7 +465,7 @@
             createFence(1.2, 4, areaLength, -areaWidth / 2, 2, 0);
             createFence(1.2, 4, areaLength, areaWidth / 2, 2, 0);
 
-            // 8. Дерева та розкидання твоїх моделей трави (Grass та Tall Grass)
+            // 8. Дерева
             const treeCount = 180;
             const trunkGeo = new THREE.CylinderGeometry(0.35, 0.5, 8, 6);
             const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4d3319, roughness: 0.9 });
@@ -498,46 +496,6 @@
                 placed++;
             }
             scene.add(trunks, crowns);
-
-            // Завантаження трави з твоїх точних файлів GLB
-            loadAndScatterGrass('./Grass by Quaternius - vUJjr....glb', 15000, 1.0);
-            loadAndScatterGrass('./Tall Grass by Quaternius - J....glb', 8000, 1.2);
-        }
-
-        function loadAndScatterGrass(url, count, baseScale) {
-            const loader = new THREE.GLTFLoader();
-            loader.load(url, (gltf) => {
-                let grassGeo = null, grassMat = null;
-                gltf.scene.traverse((child) => {
-                    if (child.isMesh && !grassGeo) {
-                        grassGeo = child.geometry;
-                        grassMat = child.material;
-                    }
-                });
-                if (!grassGeo) return;
-
-                const instancedGrass = new THREE.InstancedMesh(grassGeo, grassMat, count);
-                const dummy = new THREE.Object3D();
-                let idx = 0, tries = 0;
-
-                while (idx < count && tries < count * 3) {
-                    tries++;
-                    const gx = (Math.random() - 0.5) * (areaWidth - 10);
-                    const gz = (Math.random() - 0.5) * (areaLength - 10);
-                    if (isZoneBlocked(gx, gz, 1)) continue;
-
-                    const scale = baseScale * (0.7 + Math.random() * 0.7);
-                    dummy.position.set(gx, 0, gz);
-                    dummy.rotation.y = Math.random() * Math.PI * 2;
-                    dummy.scale.set(scale, scale, scale);
-                    dummy.updateMatrix();
-                    instancedGrass.setMatrixAt(idx, dummy.matrix);
-                    idx++;
-                }
-                instancedGrass.count = idx;
-                instancedGrass.instanceMatrix.needsUpdate = true;
-                scene.add(instancedGrass);
-            });
         }
 
         function generateChestnuts() {
