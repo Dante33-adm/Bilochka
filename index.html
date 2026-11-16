@@ -44,6 +44,26 @@
         }
         #fatigue-bar { width: 100%; height: 100%; background: #4CAF50; transition: width 0.2s; }
 
+        /* Приціл-хрестовина по центру екрана */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 16px;
+            height: 16px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 10;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 4px rgba(0,0,0,0.8);
+        }
+        #crosshair::before { top: 7px; left: 0; width: 16px; height: 2px; }
+        #crosshair::after { top: 0; left: 7px; width: 2px; height: 16px; }
+
         .movable-btn {
             position: absolute;
             color: white;
@@ -64,6 +84,7 @@
             border: 1px solid rgba(255,255,255,0.3);
         }
         
+        /* Кнопка-рука у верхній правій частині */
         #btn-collect {
             display: none;
             position: absolute;
@@ -110,6 +131,7 @@
             border: 2px solid #90CAF9;
         }
 
+        /* Дерево навичок (Модальне вікно комп'ютера) */
         #skills-modal {
             display: none;
             position: absolute;
@@ -185,8 +207,8 @@
             position: absolute;
             left: 20px;
             bottom: 20px;
-            width: 110px;
-            height: 110px;
+            width: 100px;
+            height: 100px;
             background: rgba(255, 255, 255, 0.12);
             border: 2px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
@@ -195,8 +217,8 @@
         }
         #joystick-thumb {
             position: absolute;
-            top: 35px;
-            left: 35px;
+            top: 32px;
+            left: 32px;
             width: 36px;
             height: 36px;
             background: rgba(255, 255, 255, 0.7);
@@ -238,6 +260,7 @@
         <button id="close-modal" onclick="closeSkillsModal()">Закрити</button>
     </div>
 
+    <div id="crosshair"></div>
     <div id="toast"></div>
 
     <button id="btn-collect" onclick="collectTargetedChestnut()">✋</button>
@@ -254,8 +277,7 @@
         let bags = [];
         let money = 0, acorns = 3, inventory = 0, maxInventory = 5, gameTime = 8 * 60, energy = 100;
         let energyEfficiencyLevel = 0;
-        let moveInput = { x: 0, y: 0 };
-        let isDraggingLook = false, prevTouch = { x: 0, y: 0 }, camRotX = 0;
+        let moveDir = { x: 0, z: 0 }, isDraggingLook = false, prevTouch = { x: 0, y: 0 }, camRotX = 0;
         let lookTouchId = null;
         let isModalOpen = false;
 
@@ -268,7 +290,7 @@
         const pondRadius = 44;
 
         let chestnutInstances;
-        const totalChestnuts = 25000;
+        const totalChestnuts = 35000;
         let chestnutData = [];
         let targetedChestnutIndex = -1;
 
@@ -291,8 +313,8 @@
             scene.fog = new THREE.FogExp2(0x87CEEB, 0.0011);
 
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1200);
-            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
@@ -308,7 +330,7 @@
             floor.rotation.x = -Math.PI / 2;
             scene.add(floor);
 
-            buildProceduralEnvironment();
+            buildProceduralMap();
             generateChestnuts();
 
             player = new THREE.Object3D();
@@ -335,33 +357,28 @@
             return false;
         }
 
-        function buildProceduralEnvironment() {
+        function buildProceduralMap() {
+            // Будинок
             const houseGroup = new THREE.Group();
             const walls = new THREE.Mesh(
-                new THREE.BoxGeometry(16, 7, 14),
-                new THREE.MeshStandardMaterial({ color: 0xc2a685, roughness: 0.8 })
+                new THREE.BoxGeometry(24, 9, 20),
+                new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 })
             );
-            walls.position.y = 3.5;
+            walls.position.y = 4.5;
             houseGroup.add(walls);
 
             const roof = new THREE.Mesh(
-                new THREE.ConeGeometry(11.5, 5, 4),
-                new THREE.MeshStandardMaterial({ color: 0x8b2500, roughness: 0.7 })
+                new THREE.ConeGeometry(18, 7, 4),
+                new THREE.MeshStandardMaterial({ color: 0x4a2e18, roughness: 0.9 })
             );
-            roof.position.y = 7.5;
+            roof.position.y = 12.5;
             roof.rotation.y = Math.PI / 4;
             houseGroup.add(roof);
-
-            const door = new THREE.Mesh(
-                new THREE.BoxGeometry(2.2, 4.2, 0.3),
-                new THREE.MeshStandardMaterial({ color: 0x5c3a21 })
-            );
-            door.position.set(0, 2.1, 7.05);
-            houseGroup.add(door);
 
             houseGroup.position.copy(housePos);
             scene.add(houseGroup);
 
+            // Скриня здачі
             const chestGroup = new THREE.Group();
             const chestBody = new THREE.Mesh(
                 new THREE.BoxGeometry(2.4, 1.3, 1.5),
@@ -384,9 +401,11 @@
             );
             lock.position.set(0, 0.95, 0.76);
             chestGroup.add(lock);
+
             chestGroup.position.copy(chestPos);
             scene.add(chestGroup);
 
+            // Комп'ютер
             const pcDesk = new THREE.Mesh(
                 new THREE.BoxGeometry(2.5, 1.1, 1.4),
                 new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4 })
@@ -397,17 +416,20 @@
                 new THREE.MeshStandardMaterial({ color: 0x050505, emissive: 0x0066cc, emissiveIntensity: 0.7 })
             );
             monitor.position.set(0, 1.6, 0);
+            
             const pcGroup = new THREE.Group();
             pcGroup.add(pcDesk, monitor);
             pcGroup.position.copy(pcPos);
             scene.add(pcGroup);
 
+            // Доріжки
             const pathMat = new THREE.MeshStandardMaterial({ color: 0x6e4726, roughness: 0.95 });
             const mainPath = new THREE.Mesh(new THREE.PlaneGeometry(9, 310), pathMat);
             mainPath.rotation.x = -Math.PI / 2;
             mainPath.position.set(0, 0.02, 100);
             scene.add(mainPath);
 
+            // Хвіртка
             const gatePostMat = new THREE.MeshStandardMaterial({ color: 0x3b2612 });
             const gateDoorMat = new THREE.MeshStandardMaterial({ color: 0xd4a017 });
             const post1 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 5, 1.2), gatePostMat);
@@ -418,6 +440,7 @@
             gate.position.set(0, 2, 256);
             scene.add(post1, post2, gate);
 
+            // Ставок
             const shore = new THREE.Mesh(
                 new THREE.RingGeometry(pondRadius - 1, pondRadius + 4, 32),
                 new THREE.MeshStandardMaterial({ color: 0x8c7355, roughness: 1 })
@@ -434,6 +457,7 @@
             pond.position.set(pondPos.x, 0.04, pondPos.z);
             scene.add(pond);
 
+            // Паркан
             const fenceMat = new THREE.MeshStandardMaterial({ color: 0x4a3319, roughness: 0.9 });
             const createFence = (w, h, d, x, y, z) => {
                 const f = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), fenceMat);
@@ -445,7 +469,8 @@
             createFence(1.2, 4, areaLength, -areaWidth / 2, 2, 0);
             createFence(1.2, 4, areaLength, areaWidth / 2, 2, 0);
 
-            const treeCount = 100;
+            // Дерева
+            const treeCount = 180;
             const trunkGeo = new THREE.CylinderGeometry(0.35, 0.5, 8, 6);
             const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4d3319, roughness: 0.9 });
             const crownGeo = new THREE.DodecahedronGeometry(4.2, 1);
@@ -456,7 +481,7 @@
             const dummy = new THREE.Object3D();
 
             let placed = 0, attempts = 0;
-            while (placed < treeCount && attempts < 900) {
+            while (placed < treeCount && attempts < 1200) {
                 attempts++;
                 let tx = (Math.random() - 0.5) * (areaWidth - 30);
                 let tz = (Math.random() - 0.5) * (areaLength - 30);
@@ -478,7 +503,7 @@
         }
 
         function generateChestnuts() {
-            const geom = new THREE.SphereGeometry(0.06, 6, 6);
+            const geom = new THREE.SphereGeometry(0.05, 6, 6);
             const mat = new THREE.MeshStandardMaterial({ color: 0x7c471b, roughness: 0.45 });
             
             chestnutInstances = new THREE.InstancedMesh(geom, mat, totalChestnuts);
@@ -567,6 +592,7 @@
             showToast(`Здано ${totalToProcess} шт. Зароблено: $${earned.toFixed(2)}!`);
         }
 
+        // Керування деревом навичок (комп'ютером)
         function openSkillsModal() {
             isModalOpen = true;
             document.getElementById('skills-modal').style.display = 'block';
@@ -652,16 +678,12 @@
                 for (let t of e.changedTouches) {
                     if (t.identifier === joyTouchId) {
                         let dx = t.clientX - center.x;
-                        let dy = t.clientY - center.y;
-                        const dist = Math.hypot(dx, dy);
-                        const maxDist = 38;
-                        if (dist > maxDist) {
-                            dx = (dx / dist) * maxDist;
-                            dy = (dy / dist) * maxDist;
-                        }
-                        thumb.style.transform = `translate(${dx}px, ${dy}px)`;
-                        moveInput.x = dx / maxDist;
-                        moveInput.y = dy / maxDist;
+                        let dz = t.clientY - center.y;
+                        const dist = Math.hypot(dx, dz);
+                        if (dist > 38) { dx = (dx / dist) * 38; dz = (dz / dist) * 38; }
+                        thumb.style.transform = `translate(${dx}px, ${dz}px)`;
+                        moveDir.x = dx / 38;
+                        moveDir.z = dz / 38;
                     }
                 }
             });
@@ -671,8 +693,8 @@
                     if (t.identifier === joyTouchId) {
                         joyTouchId = null;
                         thumb.style.transform = `translate(0px, 0px)`;
-                        moveInput.x = 0;
-                        moveInput.y = 0;
+                        moveDir.x = 0;
+                        moveDir.z = 0;
                     }
                 }
             };
@@ -722,40 +744,45 @@
             document.getElementById('fatigue-bar').style.width = energy + "%";
         }
 
+        const raycaster = new THREE.Raycaster();
+        const screenCenter = new THREE.Vector2(0, 0);
+
         function updateGameLogic() {
             if (isModalOpen) return;
 
-            if (Math.abs(moveInput.x) > 0.05 || Math.abs(moveInput.y) > 0.05) {
-                const moveSpeed = 0.16;
-                const angle = player.rotation.y;
-                
-                let dx = (-moveInput.x * Math.cos(angle) - moveInput.y * Math.sin(angle)) * moveSpeed;
-                let dz = (moveInput.x * Math.sin(angle) - moveInput.y * Math.cos(angle)) * moveSpeed;
+            const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
+            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
+            
+            let newX = player.position.x - moveDir.z * 0.16 * fwd.x + moveDir.x * 0.16 * right.x;
+            let newZ = player.position.z - moveDir.z * 0.16 * fwd.z + moveDir.x * 0.16 * right.z;
 
-                let newX = player.position.x + dx;
-                let newZ = player.position.z + dz;
+            const margin = 3.5;
+            newX = Math.max(-areaWidth / 2 + margin, Math.min(areaWidth / 2 - margin, newX));
+            newZ = Math.max(-areaLength / 2 + margin, Math.min(areaLength / 2 - margin, newZ));
 
-                const margin = 3.5;
-                newX = Math.max(-areaWidth / 2 + margin, Math.min(areaWidth / 2 - margin, newX));
-                newZ = Math.max(-areaLength / 2 + margin, Math.min(areaLength / 2 - margin, newZ));
-
-                if (Math.hypot(newX - pondPos.x, newZ - pondPos.z) > pondRadius - 0.5) {
-                    player.position.x = newX;
-                    player.position.z = newZ;
-                }
+            if (Math.hypot(newX - pondPos.x, newZ - pondPos.z) > pondRadius - 0.5) {
+                player.position.x = newX;
+                player.position.z = newZ;
             }
 
-            // Збір найближчого каштана в радіусі дії
+            // Збір каштанів прицілом-хрестовиною
             targetedChestnutIndex = -1;
-            if (inventory < maxInventory && chestnutInstances) {
-                let closestDist = 2.5;
+            if (inventory < maxInventory) {
+                raycaster.setFromCamera(screenCenter, camera);
+                let closestDist = 3.5;
                 for (let i = 0; i < chestnutData.length; i++) {
                     let c = chestnutData[i];
                     if (!c.collected) {
                         let distToPlayer = Math.hypot(player.position.x - c.x, player.position.z - c.z);
-                        if (distToPlayer < closestDist) {
-                            closestDist = distToPlayer;
-                            targetedChestnutIndex = i;
+                        if (distToPlayer < 4.0) {
+                            let dirToChestnut = new THREE.Vector3(c.x - player.position.x, 0, c.z - player.position.z).normalize();
+                            let playerLookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
+                            let dot = playerLookDir.dot(dirToChestnut);
+                            
+                            if (dot > 0.65 && distToPlayer < closestDist) {
+                                closestDist = distToPlayer;
+                                targetedChestnutIndex = i;
+                            }
                         }
                     }
                 }
@@ -768,6 +795,7 @@
                 collectBtn.style.display = "none";
             }
 
+            // Зони скрині та комп'ютера
             const actionBtn = document.getElementById('btn-action');
             const pcBtn = document.getElementById('btn-pc');
             
