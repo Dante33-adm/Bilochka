@@ -131,61 +131,6 @@
             border: 2px solid #90CAF9;
         }
 
-        /* Дерево навичок (Модальне вікно комп'ютера) */
-        #skills-modal {
-            display: none;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 85%;
-            max-width: 480px;
-            background: rgba(15, 23, 42, 0.92);
-            backdrop-filter: blur(10px);
-            border: 2px solid #3b82f6;
-            border-radius: 16px;
-            padding: 20px;
-            color: white;
-            z-index: 100;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-        }
-        #skills-modal h2 { margin-top: 0; font-size: 18px; text-align: center; color: #60a5fa; }
-        .skill-item {
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 10px;
-            padding: 12px;
-            margin-bottom: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .skill-info div:first-child { font-weight: bold; font-size: 14px; }
-        .skill-info div:last-child { font-size: 12px; color: #94a3b8; margin-top: 2px; }
-        .skill-btn {
-            background: #2563eb;
-            color: white;
-            border: none;
-            padding: 8px 14px;
-            border-radius: 8px;
-            font-weight: bold;
-            font-size: 13px;
-            cursor: pointer;
-        }
-        .skill-btn:active { transform: scale(0.95); background: #1d4ed8; }
-        #close-modal {
-            width: 100%;
-            background: #ef4444;
-            color: white;
-            border: none;
-            padding: 10px;
-            border-radius: 8px;
-            font-weight: bold;
-            font-size: 14px;
-            cursor: pointer;
-            margin-top: 5px;
-        }
-
         #toast {
             position: absolute;
             top: 12px;
@@ -240,33 +185,13 @@
         <div>У руках: <b><span id="inventory-display">0</span> / <span id="max-inv-display">5</span></b></div>
     </div>
 
-    <!-- Дерево навичок (комп'ютер) -->
-    <div id="skills-modal">
-        <h2>💻 Дерево навичок ПК</h2>
-        <div class="skill-item">
-            <div class="skill-info">
-                <div>Місткість кишень</div>
-                <div id="skill-inv-desc">Збільшити ліміт інвентарю (+5)</div>
-            </div>
-            <button class="skill-btn" onclick="upgradeInventorySkill()">Вивчити</button>
-        </div>
-        <div class="skill-item">
-            <div class="skill-info">
-                <div>Енергозбереження</div>
-                <div id="skill-energy-desc">Повільніше витрачається бадьорість</div>
-            </div>
-            <button class="skill-btn" onclick="upgradeEnergySkill()">Вивчити</button>
-        </div>
-        <button id="close-modal" onclick="closeSkillsModal()">Закрити</button>
-    </div>
-
     <div id="crosshair"></div>
     <div id="toast"></div>
 
     <button id="btn-collect" onclick="collectTargetedChestnut()">✋</button>
     <button class="movable-btn" id="btn-bag" onclick="placeBag()">Поставити мішок</button>
     <button id="btn-action" class="action-btn" onclick="throwIntoChest()">Здати в скриню</button>
-    <button id="btn-pc" class="action-btn" onclick="openSkillsModal()">Комп'ютер (Навички)</button>
+    <button id="btn-pc" class="action-btn" onclick="openPCUpgrades()">Комп'ютер (Покращення)</button>
 
     <div id="joystick-zone">
         <div id="joystick-thumb"></div>
@@ -276,10 +201,8 @@
         let scene, camera, renderer, player;
         let bags = [];
         let money = 0, acorns = 3, inventory = 0, maxInventory = 5, gameTime = 8 * 60, energy = 100;
-        let energyEfficiencyLevel = 0;
         let moveDir = { x: 0, z: 0 }, isDraggingLook = false, prevTouch = { x: 0, y: 0 }, camRotX = 0;
         let lookTouchId = null;
-        let isModalOpen = false;
 
         const areaWidth = 400;
         const areaLength = 520;
@@ -535,7 +458,7 @@
         }
 
         function saveGameData() {
-            const data = { money, acorns, maxInventory, energy, energyEfficiencyLevel };
+            const data = { money, acorns, maxInventory, energy };
             localStorage.setItem('cleanItUpAloneSave', JSON.stringify(data));
         }
 
@@ -547,7 +470,6 @@
                 acorns = data.acorns || 3;
                 maxInventory = data.maxInventory || 5;
                 energy = data.energy || 100;
-                energyEfficiencyLevel = data.energyEfficiencyLevel || 0;
             }
         }
 
@@ -592,49 +514,14 @@
             showToast(`Здано ${totalToProcess} шт. Зароблено: $${earned.toFixed(2)}!`);
         }
 
-        // Керування деревом навичок (комп'ютером)
-        function openSkillsModal() {
-            isModalOpen = true;
-            document.getElementById('skills-modal').style.display = 'block';
-            updateSkillModalTexts();
-        }
-
-        function closeSkillsModal() {
-            isModalOpen = false;
-            document.getElementById('skills-modal').style.display = 'none';
-        }
-
-        function updateSkillModalTexts() {
-            let invCost = maxInventory * 15;
-            document.getElementById('skill-inv-desc').textContent = `Збільшити ліміт інвентарю (+5) | Ціна: $${invCost.toFixed(2)}`;
-            
-            let energyCost = (energyEfficiencyLevel + 1) * 25;
-            document.getElementById('skill-energy-desc').textContent = `Рівень ${energyEfficiencyLevel} | Ціна: $${energyCost.toFixed(2)}`;
-        }
-
-        function upgradeInventorySkill() {
+        function openPCUpgrades() {
             let cost = maxInventory * 15;
             if (money >= cost) {
                 money -= cost;
                 maxInventory += 5;
                 updateUI();
                 saveGameData();
-                updateSkillModalTexts();
-                showToast(`Навичку кишень вивчено! Макс. інвентар: ${maxInventory}`, "#4CAF50");
-            } else {
-                showToast(`Не вистачає грошей! Потрібно: $${cost.toFixed(2)}`, "#f44336");
-            }
-        }
-
-        function upgradeEnergySkill() {
-            let cost = (energyEfficiencyLevel + 1) * 25;
-            if (money >= cost) {
-                money -= cost;
-                energyEfficiencyLevel++;
-                updateUI();
-                saveGameData();
-                updateSkillModalTexts();
-                showToast(`Енергозбереження покращено (Рівень ${energyEfficiencyLevel})!`, "#4CAF50");
+                showToast(`Навички покращено! Макс. інвентар: ${maxInventory}`, "#4CAF50");
             } else {
                 showToast(`Не вистачає грошей! Потрібно: $${cost.toFixed(2)}`, "#f44336");
             }
@@ -702,7 +589,6 @@
             zone.addEventListener('touchcancel', resetJoy);
 
             window.addEventListener('touchstart', (e) => {
-                if (isModalOpen) return;
                 for (let t of e.changedTouches) {
                     if (t.clientX > window.innerWidth * 0.35 && t.clientX < window.innerWidth - 80 && lookTouchId === null) {
                         lookTouchId = t.identifier;
@@ -713,7 +599,7 @@
             });
 
             window.addEventListener('touchmove', (e) => {
-                if (!isDraggingLook || isModalOpen) return;
+                if (!isDraggingLook) return;
                 for (let t of e.changedTouches) {
                     if (t.identifier === lookTouchId) {
                         player.rotation.y -= (t.clientX - prevTouch.x) * 0.0055;
@@ -748,8 +634,6 @@
         const screenCenter = new THREE.Vector2(0, 0);
 
         function updateGameLogic() {
-            if (isModalOpen) return;
-
             const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
             const right = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
             
@@ -765,16 +649,17 @@
                 player.position.z = newZ;
             }
 
-            // Збір каштанів прицілом-хрестовиною
+            // Перевірка наведення прицілу (хрестовини) на найближчий каштан
             targetedChestnutIndex = -1;
             if (inventory < maxInventory) {
                 raycaster.setFromCamera(screenCenter, camera);
-                let closestDist = 3.5;
+                let closestDist = 3.5; // макс. відстань для збору прицілом
                 for (let i = 0; i < chestnutData.length; i++) {
                     let c = chestnutData[i];
                     if (!c.collected) {
                         let distToPlayer = Math.hypot(player.position.x - c.x, player.position.z - c.z);
                         if (distToPlayer < 4.0) {
+                            // Проста перевірка напрямку зору гравця на каштан
                             let dirToChestnut = new THREE.Vector3(c.x - player.position.x, 0, c.z - player.position.z).normalize();
                             let playerLookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
                             let dot = playerLookDir.dot(dirToChestnut);
@@ -795,7 +680,7 @@
                 collectBtn.style.display = "none";
             }
 
-            // Зони скрині та комп'ютера
+            // Управління зонами скрині та комп'ютера окремо
             const actionBtn = document.getElementById('btn-action');
             const pcBtn = document.getElementById('btn-pc');
             
@@ -807,6 +692,7 @@
 
             if (player.position.distanceTo(pcPos) < 5.0) {
                 pcBtn.style.display = "block";
+                pcBtn.textContent = `Комп'ютер (Ціна: $${(maxInventory * 15).toFixed(2)})`;
             } else {
                 pcBtn.style.display = "none";
             }
