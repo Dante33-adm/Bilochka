@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Clean It Up Alone</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0b1d3a;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #ui {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            color: white;
+            font-size: 13px;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.9);
+            pointer-events: none;
+            line-height: 1.5;
+            z-index: 5;
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        .acorn-text { color: #FFD700; font-weight: bold; }
+        
+        #fatigue-bar-wrap {
+            width: 130px;
+            height: 8px;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.6);
+            border-radius: 4px;
+            margin: 3px 0 5px 0;
+            overflow: hidden;
+        }
+        #fatigue-bar { width: 100%; height: 100%; background: #4CAF50; transition: width 0.2s; }
+
+        .movable-btn {
+            position: absolute;
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            font-size: 14px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            cursor: pointer;
+            z-index: 10;
+            touch-action: manipulation;
+        }
+        #btn-bag {
+            bottom: 35px;
+            right: 16px;
+            background: linear-gradient(135deg, #2e7d32, #4CAF50);
+            font-weight: bold;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        #btn-bag:active { transform: scale(0.95); }
+        
+        #btn-action {
+            display: none;
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #6d360d, #9c521c);
+            color: white;
+            border: 2px solid #ffd54f;
+            padding: 14px 24px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 12px;
+            z-index: 20;
+            box-shadow: 0 0 20px rgba(255, 213, 79, 0.4);
+        }
+
+        #toast {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            max-width: 220px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 30;
+            border-left: 4px solid #4CAF50;
+        }
+
+        #joystick-zone {
+            position: absolute;
+            left: 20px;
+            bottom: 25px;
+            width: 110px;
+            height: 110px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            touch-action: none;
+            z-index: 10;
+        }
+        #joystick-thumb {
+            position: absolute;
+            top: 35px;
+            left: 35px;
+            width: 36px;
+            height: 36px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            pointer-events: none;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+
+    <div id="ui">
+        <div>Час: <span id="time-display">08:00</span></div>
+        <div>Бадьорість:</div>
+        <div id="fatigue-bar-wrap"><div id="fatigue-bar"></div></div>
+        <div>Гроші: <b>$<span id="money-display">0.00</span></b></div>
+        <div class="acorn-text">Золоті жолуді: <span id="acorn-display">3</span></div>
+        <div>У руках: <b><span id="inventory-display">0</span> / <span id="max-inv-display">5</span></b></div>
+    </div>
+
+    <div id="toast"></div>
+
+    <button class="movable-btn" id="btn-bag" onclick="placeBag()">Поставити мішок</button>
+    <button id="btn-action" onclick="throwIntoChest()">Здати в скриню (Дім)</button>
+
+    <div id="joystick-zone">
+        <div id="joystick-thumb"></div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, player;
+        let bags = [];
+        let money = 0, acorns = 3, inventory = 0, maxInventory = 5, gameTime = 8 * 60, energy = 100;
+        let moveDir = { x: 0, z: 0 }, isDraggingLook = false, prevTouch = { x: 0, y: 0 }, camRotX = 0;
+        let lookTouchId = null;
+
+        // Параметри нової карти
+        const areaWidth = 200;
+        const areaLength = 260;
+        const housePos = new THREE.Vector3(32, 0, -25);
+        const pondPos = new THREE.Vector3(-48, 0, 10);
+        const pondRadius = 22;
+
+        // Інстанси каштанів
+        let chestnutInstances;
+        const totalChestnuts = 25000;
+        let chestnutData = [];
+
+        loadGameData();
+        init();
+        animate();
+
+        function showToast(msg, color = '#4CAF50') {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.style.borderLeftColor = color;
+            toast.style.opacity = '1';
+            clearTimeout(toast._timer);
+            toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 2800);
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.FogExp2(0x87CEEB, 0.0022);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 800);
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Освітлення
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            const dirLight = new THREE.DirectionalLight(0xfffaed, 1.0);
+            dirLight.position.set(120, 250, 140);
+            scene.add(dirLight);
+
+            // Земля
+            const floor = new THREE.Mesh(
+                new THREE.PlaneGeometry(areaWidth, areaLength),
+                new THREE.MeshStandardMaterial({ color: 0x2b531b, roughness: 0.95 })
+            );
+            floor.rotation.x = -Math.PI / 2;
+            scene.add(floor);
+
+            buildNewMap();
+            scatterGrass();
+            generateChestnuts();
+
+            // Гравець
+            player = new THREE.Object3D();
+            player.position.set(15, 0, 15);
+            scene.add(player);
+            camera.position.set(0, 1.65, 0);
+            player.add(camera);
+
+            setupTouchControls();
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // Перевірка, чи точка вільна від будівель/ставки/доріжки
+        function isZoneBlocked(x, z, extraMargin = 0) {
+            // Ставок
+            if (Math.hypot(x - pondPos.x, z - pondPos.z) < pondRadius + 2 + extraMargin) return true;
+            // Будинок
+            if (Math.abs(x - housePos.x) < 12 + extraMargin && Math.abs(z - housePos.z) < 10 + extraMargin) return true;
+            // Головна доріжка (від хвіртки до центру)
+            if (Math.abs(x) < 3.2 + extraMargin && z > -25 && z < 128) return true;
+            // Доріжка до будинку
+            if (z > -28 - extraMargin && z < -22 + extraMargin && x > -2 && x < housePos.x) return true;
+            return false;
+        }
+
+        function buildNewMap() {
+            const loader = new THREE.GLTFLoader();
+
+            // 1. Будинок
+            loader.load('./house.glb', (gltf) => {
+                const house = gltf.scene;
+                house.position.copy(housePos);
+                house.scale.set(3, 3, 3);
+                scene.add(house);
+            }, undefined, () => {
+                // Резервна модель будинку з дахом та скринею
+                const houseGroup = new THREE.Group();
+                const walls = new THREE.Mesh(
+                    new THREE.BoxGeometry(14, 5, 11),
+                    new THREE.MeshStandardMaterial({ color: 0xa0522d, roughness: 0.85 })
+                );
+                walls.position.y = 2.5;
+                houseGroup.add(walls);
+
+                const roof = new THREE.Mesh(
+                    new THREE.ConeGeometry(10.5, 4, 4),
+                    new THREE.MeshStandardMaterial({ color: 0x5c2614, roughness: 0.9 })
+                );
+                roof.position.y = 7;
+                roof.rotation.y = Math.PI / 4;
+                houseGroup.add(roof);
+
+                houseGroup.position.copy(housePos);
+                scene.add(houseGroup);
+            });
+
+            // Скриня біля входу в будинок
+            const chest = new THREE.Mesh(
+                new THREE.BoxGeometry(1.8, 1.1, 1.1),
+                new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6 })
+            );
+            chest.position.set(housePos.x - 8, 0.55, housePos.z);
+            scene.add(chest);
+
+            // 2. Система доріжок
+            const pathMat = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.92 });
+            // Центральна алея
+            const mainPath = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 155), pathMat);
+            mainPath.rotation.x = -Math.PI / 2;
+            mainPath.position.set(0, 0.02, 50);
+            scene.add(mainPath);
+
+            // Відгалуження до будинку
+            const housePath = new THREE.Mesh(new THREE.PlaneGeometry(housePos.x + 2, 4), pathMat);
+            housePath.rotation.x = -Math.PI / 2;
+            housePath.position.set(housePos.x / 2, 0.025, housePos.z);
+            scene.add(housePath);
+
+            // 3. Хвіртка на вході
+            const gatePostMat = new THREE.MeshStandardMaterial({ color: 0x3b2612 });
+            const gateDoorMat = new THREE.MeshStandardMaterial({ color: 0xd4a017 });
+            const post1 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 3.6, 0.8), gatePostMat);
+            post1.position.set(-3.2, 1.8, 128);
+            const post2 = post1.clone();
+            post2.position.set(3.2, 1.8, 128);
+            const gate = new THREE.Mesh(new THREE.BoxGeometry(5.6, 2.8, 0.3), gateDoorMat);
+            gate.position.set(0, 1.5, 128);
+            scene.add(post1, post2, gate);
+
+            // 4. Ставок з берегом
+            const shore = new THREE.Mesh(
+                new THREE.RingGeometry(pondRadius - 0.5, pondRadius + 2.2, 32),
+                new THREE.MeshStandardMaterial({ color: 0x8c7355, roughness: 1 })
+            );
+            shore.rotation.x = -Math.PI / 2;
+            shore.position.set(pondPos.x, 0.02, pondPos.z);
+            scene.add(shore);
+
+            const pond = new THREE.Mesh(
+                new THREE.CircleGeometry(pondRadius, 32),
+                new THREE.MeshStandardMaterial({ color: 0x2980b9, roughness: 0.15, transparent: true, opacity: 0.88 })
+            );
+            pond.rotation.x = -Math.PI / 2;
+            pond.position.set(pondPos.x, 0.04, pondPos.z);
+            scene.add(pond);
+
+            // 5. Паркан по периметру
+            const fenceMat = new THREE.MeshStandardMaterial({ color: 0x4a3319, roughness: 0.9 });
+            const createFence = (w, h, d, x, y, z) => {
+                const f = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), fenceMat);
+                f.position.set(x, y, z);
+                scene.add(f);
+            };
+            createFence(areaWidth, 3, 0.8, 0, 1.5, -areaLength / 2);
+            createFence(areaWidth, 3, 0.8, 0, 1.5, areaLength / 2);
+            createFence(0.8, 3, areaLength, -areaWidth / 2, 1.5, 0);
+            createFence(0.8, 3, areaLength, areaWidth / 2, 1.5, 0);
+
+            // 6. Дерева (каштани по подвір'ю через InstancedMesh)
+            const treeCount = 65;
+            const trunkGeo = new THREE.CylinderGeometry(0.4, 0.65, 5, 7);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4d3319, roughness: 0.9 });
+            const crownGeo = new THREE.DodecahedronGeometry(3.4, 1);
+            const crownMat = new THREE.MeshStandardMaterial({ color: 0x1e4d18, roughness: 0.8 });
+
+            const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
+            const crowns = new THREE.InstancedMesh(crownGeo, crownMat, treeCount);
+            const dummy = new THREE.Object3D();
+
+            let placed = 0, attempts = 0;
+            while (placed < treeCount && attempts < 500) {
+                attempts++;
+                let tx = (Math.random() - 0.5) * (areaWidth - 18);
+                let tz = (Math.random() - 0.5) * (areaLength - 18);
+                if (isZoneBlocked(tx, tz, 4)) continue;
+
+                const s = 0.85 + Math.random() * 0.5;
+                dummy.position.set(tx, 2.5 * s, tz);
+                dummy.scale.set(s, s, s);
+                dummy.rotation.y = Math.random() * Math.PI;
+                dummy.updateMatrix();
+                trunks.setMatrixAt(placed, dummy.matrix);
+
+                dummy.position.set(tx, 6.2 * s, tz);
+                dummy.updateMatrix();
+                crowns.setMatrixAt(placed, dummy.matrix);
+                placed++;
+            }
+            scene.add(trunks, crowns);
+        }
+
+        // Засіювання двору моделями трави Grass_Common_Tall та Grass_Common_Short
+        function scatterGrass() {
+            const loader = new THREE.GLTFLoader();
+
+            const populateGrassModel = (url, count, baseScale) => {
+                loader.load(url, (gltf) => {
+                    let grassGeo = null;
+                    let grassMat = null;
+
+                    gltf.scene.traverse((child) => {
+                        if (child.isMesh && !grassGeo) {
+                            grassGeo = child.geometry;
+                            grassMat = child.material;
+                        }
+                    });
+
+                    if (!grassGeo) return;
+
+                    const instancedGrass = new THREE.InstancedMesh(grassGeo, grassMat, count);
+                    const dummy = new THREE.Object3D();
+
+                    let idx = 0, tries = 0;
+                    while (idx < count && tries < count * 3) {
+                        tries++;
+                        const gx = (Math.random() - 0.5) * (areaWidth - 4);
+                        const gz = (Math.random() - 0.5) * (areaLength - 4);
+
+                        if (isZoneBlocked(gx, gz, 0.5)) continue;
+
+                        const scale = baseScale * (0.7 + Math.random() * 0.7);
+                        dummy.position.set(gx, 0, gz);
+                        dummy.rotation.y = Math.random() * Math.PI * 2;
+                        dummy.scale.set(scale, scale, scale);
+                        dummy.updateMatrix();
+
+                        instancedGrass.setMatrixAt(idx, dummy.matrix);
+                        idx++;
+                    }
+                    instancedGrass.count = idx;
+                    instancedGrass.instanceMatrix.needsUpdate = true;
+                    scene.add(instancedGrass);
+                }, undefined, () => {
+                    // Якщо файл .glb ще не закинуто в GitHub — тихо пропускаємо без помилок
+                });
+            };
+
+            populateGrassModel('./Grass_Common_Tall.glb', 8000, 1.0);
+            populateGrassModel('./Grass_Common_Short.glb', 14000, 1.0);
+        }
+
+        function generateChestnuts() {
+            const geom = new THREE.SphereGeometry(0.07, 6, 6);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x7c471b, roughness: 0.45 });
+            
+            chestnutInstances = new THREE.InstancedMesh(geom, mat, totalChestnuts);
+            chestnutInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+            const dummy = new THREE.Object3D();
+            let created = 0, tries = 0;
+
+            while (created < totalChestnuts && tries < totalChestnuts * 2) {
+                tries++;
+                let x = (Math.random() - 0.5) * (areaWidth - 8);
+                let z = (Math.random() - 0.5) * (areaLength - 8);
+
+                if (isZoneBlocked(x, z, 0.2)) continue;
+
+                dummy.position.set(x, 0.06, z);
+                const s = 0.9 + Math.random() * 0.45;
+                dummy.scale.set(s, s * 0.85, s);
+                dummy.updateMatrix();
+                
+                chestnutInstances.setMatrixAt(created, dummy.matrix);
+                chestnutData.push({ x: x, z: z, collected: false });
+                created++;
+            }
+            
+            chestnutInstances.count = created;
+            chestnutInstances.instanceMatrix.needsUpdate = true;
+            scene.add(chestnutInstances);
+        }
+
+        function saveGameData() {
+            const data = { money, acorns, maxInventory, energy };
+            localStorage.setItem('cleanItUpAloneSave', JSON.stringify(data));
+        }
+
+        function loadGameData() {
+            const saved = localStorage.getItem('cleanItUpAloneSave');
+            if (saved) {
+                const data = JSON.parse(saved);
+                money = data.money || 0;
+                acorns = data.acorns || 3;
+                maxInventory = data.maxInventory || 5;
+                energy = data.energy || 100;
+            }
+        }
+
+        function placeBag() {
+            if (inventory === 0) {
+                showToast("Руки порожні! Спочатку назбирай каштанів.", "#ff9800");
+                return;
+            }
+            const bagMesh = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.35, 0.45, 0.85, 8),
+                new THREE.MeshStandardMaterial({ color: 0xc2a378, roughness: 0.9 })
+            );
+            bagMesh.position.copy(player.position);
+            bagMesh.position.y = 0.42;
+            scene.add(bagMesh);
+            bags.push({ mesh: bagMesh, count: inventory });
+            showToast(`Мішок поставлено (каштанів: ${inventory})`);
+            inventory = 0;
+            updateUI();
+        }
+
+        function throwIntoChest() {
+            let totalToProcess = inventory;
+            for (let i = bags.length - 1; i >= 0; i--) {
+                if (player.position.distanceTo(bags[i].mesh.position) < 9.0) {
+                    totalToProcess += bags[i].count;
+                    scene.remove(bags[i].mesh);
+                    bags.splice(i, 1);
+                }
+            }
+
+            if (totalToProcess === 0) {
+                showToast("Немає каштанів у руках чи в мішках поруч!", "#f44336");
+                return;
+            }
+
+            let earned = totalToProcess * 0.7;
+            money += earned;
+            inventory = 0;
+            updateUI();
+            saveGameData();
+            showToast(`Здано ${totalToProcess} шт. Зароблено: $${earned.toFixed(2)}!`);
+        }
+
+        function setupTouchControls() {
+            const zone = document.getElementById('joystick-zone');
+            const thumb = document.getElementById('joystick-thumb');
+            let joyTouchId = null, center = { x: 0, y: 0 };
+
+            zone.addEventListener('touchstart', (e) => {
+                e.stopPropagation();
+                const t = e.changedTouches[0];
+                joyTouchId = t.identifier;
+                const r = zone.getBoundingClientRect();
+                center.x = r.left + r.width / 2;
+                center.y = r.top + r.height / 2;
+            });
+
+            zone.addEventListener('touchmove', (e) => {
+                e.stopPropagation();
+                for (let t of e.changedTouches) {
+                    if (t.identifier === joyTouchId) {
+                        let dx = t.clientX - center.x;
+                        let dz = t.clientY - center.y;
+                        const dist = Math.hypot(dx, dz);
+                        if (dist > 38) { dx = (dx / dist) * 38; dz = (dz / dist) * 38; }
+                        thumb.style.transform = `translate(${dx}px, ${dz}px)`;
+                        moveDir.x = dx / 38;
+                        moveDir.z = dz / 38;
+                    }
+                }
+            });
+
+            const resetJoy = (e) => {
+                for (let t of e.changedTouches) {
+                    if (t.identifier === joyTouchId) {
+                        joyTouchId = null;
+                        thumb.style.transform = `translate(0px, 0px)`;
+                        moveDir.x = 0;
+                        moveDir.z = 0;
+                    }
+                }
+            };
+            zone.addEventListener('touchend', resetJoy);
+            zone.addEventListener('touchcancel', resetJoy);
+
+            window.addEventListener('touchstart', (e) => {
+                for (let t of e.changedTouches) {
+                    if (t.clientX > window.innerWidth * 0.35 && lookTouchId === null) {
+                        lookTouchId = t.identifier;
+                        isDraggingLook = true;
+                        prevTouch = { x: t.clientX, y: t.clientY };
+                    }
+                }
+            });
+
+            window.addEventListener('touchmove', (e) => {
+                if (!isDraggingLook) return;
+                for (let t of e.changedTouches) {
+                    if (t.identifier === lookTouchId) {
+                        player.rotation.y -= (t.clientX - prevTouch.x) * 0.0055;
+                        camRotX = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, camRotX - (t.clientY - prevTouch.y) * 0.0055));
+                        camera.rotation.x = camRotX;
+                        prevTouch = { x: t.clientX, y: t.clientY };
+                    }
+                }
+            });
+
+            const resetLook = (e) => {
+                for (let t of e.changedTouches) {
+                    if (t.identifier === lookTouchId) {
+                        lookTouchId = null;
+                        isDraggingLook = false;
+                    }
+                }
+            };
+            window.addEventListener('touchend', resetLook);
+            window.addEventListener('touchcancel', resetLook);
+        }
+
+        function updateUI() {
+            document.getElementById('money-display').textContent = money.toFixed(2);
+            document.getElementById('acorn-display').textContent = acorns;
+            document.getElementById('inventory-display').textContent = inventory;
+            document.getElementById('max-inv-display').textContent = maxInventory;
+            document.getElementById('fatigue-bar').style.width = energy + "%";
+        }
+
+        const dummyMatrix = new THREE.Object3D();
+        function updateGameLogic() {
+            const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
+            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
+            
+            let newX = player.position.x - moveDir.z * 0.16 * fwd.x + moveDir.x * 0.16 * right.x;
+            let newZ = player.position.z - moveDir.z * 0.16 * fwd.z + moveDir.x * 0.16 * right.z;
+
+            // Обмеження парканом та захист від заходження у воду ставка
+            const margin = 2.5;
+            newX = Math.max(-areaWidth / 2 + margin, Math.min(areaWidth / 2 - margin, newX));
+            newZ = Math.max(-areaLength / 2 + margin, Math.min(areaLength / 2 - margin, newZ));
+
+            if (Math.hypot(newX - pondPos.x, newZ - pondPos.z) > pondRadius - 0.5) {
+                player.position.x = newX;
+                player.position.z = newZ;
+            }
+
+            // Збір каштанів
+            if (inventory < maxInventory) {
+                let updated = false;
+                for (let i = 0; i < chestnutData.length; i++) {
+                    let c = chestnutData[i];
+                    if (!c.collected) {
+                        if (Math.abs(player.position.x - c.x) < 1.3 && Math.abs(player.position.z - c.z) < 1.3) {
+                            if (Math.hypot(player.position.x - c.x, player.position.z - c.z) < 1.3) {
+                                c.collected = true;
+                                inventory++;
+                                dummyMatrix.position.set(0, -999, 0);
+                                dummyMatrix.scale.set(0, 0, 0);
+                                dummyMatrix.updateMatrix();
+                                chestnutInstances.setMatrixAt(i, dummyMatrix.matrix);
+                                updated = true;
+                                if (inventory >= maxInventory) break;
+                            }
+                        }
+                    }
+                }
+                if (updated) {
+                    chestnutInstances.instanceMatrix.needsUpdate = true;
+                    updateUI();
+                }
+            }
+
+            // Кнопка здачі біля будинку
+            const actionBtn = document.getElementById('btn-action');
+            if (player.position.distanceTo(housePos) < 13.0) {
+                actionBtn.style.display = "block";
+            } else {
+                actionBtn.style.display = "none";
+            }
+
+            // Ігровий час
+            gameTime += 0.15;
+            if (gameTime >= 1440) gameTime = 0;
+            const h = Math.floor(gameTime / 60), m = Math.floor(gameTime % 60);
+            document.getElementById('time-display').textContent = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updateGameLogic();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
