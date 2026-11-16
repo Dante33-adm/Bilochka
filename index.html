@@ -289,7 +289,7 @@
         const pondRadius = 44;
 
         let chestnutInstances;
-        const totalChestnuts = 5000; // Зменшено для ідеальної оптимізації мобільних
+        const totalChestnuts = 25000;
         let chestnutData = [];
         let targetedChestnutIndex = -1;
 
@@ -357,22 +357,33 @@
         }
 
         function buildProceduralEnvironment() {
-            // Будинок
+            // Красивий та акуратний процедурний будинок
             const houseGroup = new THREE.Group();
+            
+            // Стіни будинку
             const walls = new THREE.Mesh(
-                new THREE.BoxGeometry(24, 9, 20),
-                new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 })
+                new THREE.BoxGeometry(16, 7, 14),
+                new THREE.MeshStandardMaterial({ color: 0xc2a685, roughness: 0.8 })
             );
-            walls.position.y = 4.5;
+            walls.position.y = 3.5;
             houseGroup.add(walls);
 
+            // Дах (двосхилий)
             const roof = new THREE.Mesh(
-                new THREE.ConeGeometry(18, 7, 4),
-                new THREE.MeshStandardMaterial({ color: 0x4a2e18, roughness: 0.9 })
+                new THREE.ConeGeometry(11.5, 5, 4),
+                new THREE.MeshStandardMaterial({ color: 0x8b2500, roughness: 0.7 })
             );
-            roof.position.y = 12.5;
+            roof.position.y = 7.5;
             roof.rotation.y = Math.PI / 4;
             houseGroup.add(roof);
+
+            // Двері
+            const door = new THREE.Mesh(
+                new THREE.BoxGeometry(2.2, 4.2, 0.3),
+                new THREE.MeshStandardMaterial({ color: 0x5c3a21 })
+            );
+            door.position.set(0, 2.1, 7.05);
+            houseGroup.add(door);
 
             houseGroup.position.copy(housePos);
             scene.add(houseGroup);
@@ -467,7 +478,7 @@
             createFence(1.2, 4, areaLength, areaWidth / 2, 2, 0);
 
             // Дерева
-            const treeCount = 90;
+            const treeCount = 100;
             const trunkGeo = new THREE.CylinderGeometry(0.35, 0.5, 8, 6);
             const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4d3319, roughness: 0.9 });
             const crownGeo = new THREE.DodecahedronGeometry(4.2, 1);
@@ -478,7 +489,7 @@
             const dummy = new THREE.Object3D();
 
             let placed = 0, attempts = 0;
-            while (placed < treeCount && attempts < 800) {
+            while (placed < treeCount && attempts < 900) {
                 attempts++;
                 let tx = (Math.random() - 0.5) * (areaWidth - 30);
                 let tz = (Math.random() - 0.5) * (areaLength - 30);
