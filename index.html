@@ -65,21 +65,30 @@
         }
         #btn-bag:active { transform: scale(0.95); }
         
-        #btn-action {
+        .action-btn {
             display: none;
             position: absolute;
             bottom: 100px;
             left: 50%;
             transform: translateX(-50%);
-            background: linear-gradient(135deg, #6d360d, #9c521c);
             color: white;
-            border: 2px solid #ffd54f;
             padding: 14px 24px;
             font-size: 15px;
             font-weight: bold;
             border-radius: 12px;
             z-index: 20;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            cursor: pointer;
+        }
+        #btn-action {
+            background: linear-gradient(135deg, #6d360d, #9c521c);
+            border: 2px solid #ffd54f;
             box-shadow: 0 0 20px rgba(255, 213, 79, 0.4);
+        }
+        #btn-pc {
+            bottom: 165px;
+            background: linear-gradient(135deg, #1976D2, #2196F3);
+            border: 2px solid #90CAF9;
         }
 
         #toast {
@@ -140,7 +149,8 @@
     <div id="toast"></div>
 
     <button class="movable-btn" id="btn-bag" onclick="placeBag()">Поставити мішок</button>
-    <button id="btn-action" onclick="throwIntoChest()">Здати в скриню (Дім)</button>
+    <button id="btn-action" class="action-btn" onclick="throwIntoChest()">Здати в скриню (Дім)</button>
+    <button id="btn-pc" class="action-btn" onclick="openPCUpgrades()">Комп'ютер (Покращення)</button>
 
     <div id="joystick-zone">
         <div id="joystick-thumb"></div>
@@ -153,16 +163,15 @@
         let moveDir = { x: 0, z: 0 }, isDraggingLook = false, prevTouch = { x: 0, y: 0 }, camRotX = 0;
         let lookTouchId = null;
 
-        // Параметри нової карти
-        const areaWidth = 200;
-        const areaLength = 260;
-        const housePos = new THREE.Vector3(32, 0, -25);
-        const pondPos = new THREE.Vector3(-48, 0, 10);
-        const pondRadius = 22;
+        // Світ збільшено в 2 рази (було 200x260 -> стало 400x520)
+        const areaWidth = 400;
+        const areaLength = 520;
+        const housePos = new THREE.Vector3(64, 0, -50);
+        const pondPos = new THREE.Vector3(-96, 0, 20);
+        const pondRadius = 44;
 
-        // Інстанси каштанів
         let chestnutInstances;
-        const totalChestnuts = 25000;
+        const totalChestnuts = 35000;
         let chestnutData = [];
 
         loadGameData();
@@ -181,21 +190,19 @@
         function init() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x87CEEB);
-            scene.fog = new THREE.FogExp2(0x87CEEB, 0.0022);
+            scene.fog = new THREE.FogExp2(0x87CEEB, 0.0011);
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 800);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1200);
             renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // Освітлення
             scene.add(new THREE.AmbientLight(0xffffff, 0.8));
             const dirLight = new THREE.DirectionalLight(0xfffaed, 1.0);
-            dirLight.position.set(120, 250, 140);
+            dirLight.position.set(200, 400, 250);
             scene.add(dirLight);
 
-            // Земля
             const floor = new THREE.Mesh(
                 new THREE.PlaneGeometry(areaWidth, areaLength),
                 new THREE.MeshStandardMaterial({ color: 0x2b531b, roughness: 0.95 })
@@ -207,14 +214,15 @@
             scatterGrass();
             generateChestnuts();
 
-            // Гравець
             player = new THREE.Object3D();
-            player.position.set(15, 0, 15);
+            player.position.set(30, 0, 30);
             scene.add(player);
             camera.position.set(0, 1.65, 0);
             player.add(camera);
 
             setupTouchControls();
+            updateUI();
+
             window.addEventListener('resize', () => {
                 camera.aspect = window.innerWidth / window.innerHeight;
                 camera.updateProjectionMatrix();
@@ -222,43 +230,37 @@
             });
         }
 
-        // Перевірка, чи точка вільна від будівель/ставки/доріжки
         function isZoneBlocked(x, z, extraMargin = 0) {
-            // Ставок
-            if (Math.hypot(x - pondPos.x, z - pondPos.z) < pondRadius + 2 + extraMargin) return true;
-            // Будинок
-            if (Math.abs(x - housePos.x) < 12 + extraMargin && Math.abs(z - housePos.z) < 10 + extraMargin) return true;
-            // Головна доріжка (від хвіртки до центру)
-            if (Math.abs(x) < 3.2 + extraMargin && z > -25 && z < 128) return true;
-            // Доріжка до будинку
-            if (z > -28 - extraMargin && z < -22 + extraMargin && x > -2 && x < housePos.x) return true;
+            if (Math.hypot(x - pondPos.x, z - pondPos.z) < pondRadius + 3 + extraMargin) return true;
+            if (Math.abs(x - housePos.x) < 16 + extraMargin && Math.abs(z - housePos.z) < 14 + extraMargin) return true;
+            if (Math.abs(x) < 6.5 + extraMargin && z > -50 && z < 256) return true;
+            if (z > -56 - extraMargin && z < -44 + extraMargin && x > -4 && x < housePos.x) return true;
             return false;
         }
 
         function buildNewMap() {
             const loader = new THREE.GLTFLoader();
 
-            // 1. Будинок
+            // Будинок
             loader.load('./house.glb', (gltf) => {
                 const house = gltf.scene;
                 house.position.copy(housePos);
-                house.scale.set(3, 3, 3);
+                house.scale.set(6, 6, 6);
                 scene.add(house);
             }, undefined, () => {
-                // Резервна модель будинку з дахом та скринею
                 const houseGroup = new THREE.Group();
                 const walls = new THREE.Mesh(
-                    new THREE.BoxGeometry(14, 5, 11),
+                    new THREE.BoxGeometry(28, 10, 22),
                     new THREE.MeshStandardMaterial({ color: 0xa0522d, roughness: 0.85 })
                 );
-                walls.position.y = 2.5;
+                walls.position.y = 5;
                 houseGroup.add(walls);
 
                 const roof = new THREE.Mesh(
-                    new THREE.ConeGeometry(10.5, 4, 4),
+                    new THREE.ConeGeometry(21, 8, 4),
                     new THREE.MeshStandardMaterial({ color: 0x5c2614, roughness: 0.9 })
                 );
-                roof.position.y = 7;
+                roof.position.y = 14;
                 roof.rotation.y = Math.PI / 4;
                 houseGroup.add(roof);
 
@@ -266,42 +268,50 @@
                 scene.add(houseGroup);
             });
 
-            // Скриня біля входу в будинок
+            // Скриня біля дому
             const chest = new THREE.Mesh(
-                new THREE.BoxGeometry(1.8, 1.1, 1.1),
+                new THREE.BoxGeometry(2.2, 1.4, 1.4),
                 new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6 })
             );
-            chest.position.set(housePos.x - 8, 0.55, housePos.z);
+            chest.position.set(housePos.x - 14, 0.7, housePos.z);
             scene.add(chest);
 
-            // 2. Система доріжок
+            // Комп'ютер для покращень (всередині/біля будинку)
+            const pcDesk = new THREE.Mesh(
+                new THREE.BoxGeometry(2.5, 1.2, 1.5),
+                new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 })
+            );
+            pcDesk.position.set(housePos.x + 8, 0.6, housePos.z);
+            scene.add(pcDesk);
+
+            const monitor = new THREE.Mesh(
+                new THREE.BoxGeometry(1.4, 0.9, 0.2),
+                new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x004488, emissiveIntensity: 0.5 })
+            );
+            monitor.position.set(housePos.x + 8, 1.7, housePos.z);
+            scene.add(monitor);
+
+            // Доріжки
             const pathMat = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.92 });
-            // Центральна алея
-            const mainPath = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 155), pathMat);
+            const mainPath = new THREE.Mesh(new THREE.PlaneGeometry(9, 310), pathMat);
             mainPath.rotation.x = -Math.PI / 2;
-            mainPath.position.set(0, 0.02, 50);
+            mainPath.position.set(0, 0.02, 100);
             scene.add(mainPath);
 
-            // Відгалуження до будинку
-            const housePath = new THREE.Mesh(new THREE.PlaneGeometry(housePos.x + 2, 4), pathMat);
-            housePath.rotation.x = -Math.PI / 2;
-            housePath.position.set(housePos.x / 2, 0.025, housePos.z);
-            scene.add(housePath);
-
-            // 3. Хвіртка на вході
+            // Хвіртка
             const gatePostMat = new THREE.MeshStandardMaterial({ color: 0x3b2612 });
             const gateDoorMat = new THREE.MeshStandardMaterial({ color: 0xd4a017 });
-            const post1 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 3.6, 0.8), gatePostMat);
-            post1.position.set(-3.2, 1.8, 128);
+            const post1 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 5, 1.2), gatePostMat);
+            post1.position.set(-6.5, 2.5, 256);
             const post2 = post1.clone();
-            post2.position.set(3.2, 1.8, 128);
-            const gate = new THREE.Mesh(new THREE.BoxGeometry(5.6, 2.8, 0.3), gateDoorMat);
-            gate.position.set(0, 1.5, 128);
+            post2.position.set(6.5, 2.5, 256);
+            const gate = new THREE.Mesh(new THREE.BoxGeometry(11, 3.8, 0.5), gateDoorMat);
+            gate.position.set(0, 2, 256);
             scene.add(post1, post2, gate);
 
-            // 4. Ставок з берегом
+            // Ставок
             const shore = new THREE.Mesh(
-                new THREE.RingGeometry(pondRadius - 0.5, pondRadius + 2.2, 32),
+                new THREE.RingGeometry(pondRadius - 1, pondRadius + 4, 32),
                 new THREE.MeshStandardMaterial({ color: 0x8c7355, roughness: 1 })
             );
             shore.rotation.x = -Math.PI / 2;
@@ -316,23 +326,23 @@
             pond.position.set(pondPos.x, 0.04, pondPos.z);
             scene.add(pond);
 
-            // 5. Паркан по периметру
+            // Паркан по периметру
             const fenceMat = new THREE.MeshStandardMaterial({ color: 0x4a3319, roughness: 0.9 });
             const createFence = (w, h, d, x, y, z) => {
                 const f = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), fenceMat);
                 f.position.set(x, y, z);
                 scene.add(f);
             };
-            createFence(areaWidth, 3, 0.8, 0, 1.5, -areaLength / 2);
-            createFence(areaWidth, 3, 0.8, 0, 1.5, areaLength / 2);
-            createFence(0.8, 3, areaLength, -areaWidth / 2, 1.5, 0);
-            createFence(0.8, 3, areaLength, areaWidth / 2, 1.5, 0);
+            createFence(areaWidth, 4, 1.2, 0, 2, -areaLength / 2);
+            createFence(areaWidth, 4, 1.2, 0, 2, areaLength / 2);
+            createFence(1.2, 4, areaLength, -areaWidth / 2, 2, 0);
+            createFence(1.2, 4, areaLength, areaWidth / 2, 2, 0);
 
-            // 6. Дерева (каштани по подвір'ю через InstancedMesh)
-            const treeCount = 65;
-            const trunkGeo = new THREE.CylinderGeometry(0.4, 0.65, 5, 7);
+            // Дерева
+            const treeCount = 120;
+            const trunkGeo = new THREE.CylinderGeometry(0.8, 1.3, 10, 7);
             const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4d3319, roughness: 0.9 });
-            const crownGeo = new THREE.DodecahedronGeometry(3.4, 1);
+            const crownGeo = new THREE.DodecahedronGeometry(6.5, 1);
             const crownMat = new THREE.MeshStandardMaterial({ color: 0x1e4d18, roughness: 0.8 });
 
             const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
@@ -340,20 +350,20 @@
             const dummy = new THREE.Object3D();
 
             let placed = 0, attempts = 0;
-            while (placed < treeCount && attempts < 500) {
+            while (placed < treeCount && attempts < 1000) {
                 attempts++;
-                let tx = (Math.random() - 0.5) * (areaWidth - 18);
-                let tz = (Math.random() - 0.5) * (areaLength - 18);
-                if (isZoneBlocked(tx, tz, 4)) continue;
+                let tx = (Math.random() - 0.5) * (areaWidth - 30);
+                let tz = (Math.random() - 0.5) * (areaLength - 30);
+                if (isZoneBlocked(tx, tz, 8)) continue;
 
-                const s = 0.85 + Math.random() * 0.5;
-                dummy.position.set(tx, 2.5 * s, tz);
+                const s = 0.9 + Math.random() * 0.6;
+                dummy.position.set(tx, 5 * s, tz);
                 dummy.scale.set(s, s, s);
                 dummy.rotation.y = Math.random() * Math.PI;
                 dummy.updateMatrix();
                 trunks.setMatrixAt(placed, dummy.matrix);
 
-                dummy.position.set(tx, 6.2 * s, tz);
+                dummy.position.set(tx, 12 * s, tz);
                 dummy.updateMatrix();
                 crowns.setMatrixAt(placed, dummy.matrix);
                 placed++;
@@ -361,58 +371,50 @@
             scene.add(trunks, crowns);
         }
 
-        // Засіювання двору моделями трави Grass_Common_Tall та Grass_Common_Short
         function scatterGrass() {
             const loader = new THREE.GLTFLoader();
-
             const populateGrassModel = (url, count, baseScale) => {
                 loader.load(url, (gltf) => {
-                    let grassGeo = null;
-                    let grassMat = null;
-
+                    let grassGeo = null, grassMat = null;
                     gltf.scene.traverse((child) => {
                         if (child.isMesh && !grassGeo) {
                             grassGeo = child.geometry;
                             grassMat = child.material;
                         }
                     });
-
                     if (!grassGeo) return;
 
                     const instancedGrass = new THREE.InstancedMesh(grassGeo, grassMat, count);
                     const dummy = new THREE.Object3D();
-
                     let idx = 0, tries = 0;
+
                     while (idx < count && tries < count * 3) {
                         tries++;
-                        const gx = (Math.random() - 0.5) * (areaWidth - 4);
-                        const gz = (Math.random() - 0.5) * (areaLength - 4);
-
-                        if (isZoneBlocked(gx, gz, 0.5)) continue;
+                        const gx = (Math.random() - 0.5) * (areaWidth - 10);
+                        const gz = (Math.random() - 0.5) * (areaLength - 10);
+                        if (isZoneBlocked(gx, gz, 1)) continue;
 
                         const scale = baseScale * (0.7 + Math.random() * 0.7);
                         dummy.position.set(gx, 0, gz);
                         dummy.rotation.y = Math.random() * Math.PI * 2;
                         dummy.scale.set(scale, scale, scale);
                         dummy.updateMatrix();
-
                         instancedGrass.setMatrixAt(idx, dummy.matrix);
                         idx++;
                     }
                     instancedGrass.count = idx;
                     instancedGrass.instanceMatrix.needsUpdate = true;
                     scene.add(instancedGrass);
-                }, undefined, () => {
-                    // Якщо файл .glb ще не закинуто в GitHub — тихо пропускаємо без помилок
                 });
             };
 
-            populateGrassModel('./Grass_Common_Tall.glb', 8000, 1.0);
-            populateGrassModel('./Grass_Common_Short.glb', 14000, 1.0);
+            populateGrassModel('./Grass_Common_Tall.glb', 15000, 1.0);
+            populateGrassModel('./Grass_Common_Short.glb', 25000, 1.0);
         }
 
         function generateChestnuts() {
-            const geom = new THREE.SphereGeometry(0.07, 6, 6);
+            // Зменшено розмір каштанів (радіус сферы зменшено з 0.07 до 0.035)
+            const geom = new THREE.SphereGeometry(0.035, 6, 6);
             const mat = new THREE.MeshStandardMaterial({ color: 0x7c471b, roughness: 0.45 });
             
             chestnutInstances = new THREE.InstancedMesh(geom, mat, totalChestnuts);
@@ -423,14 +425,14 @@
 
             while (created < totalChestnuts && tries < totalChestnuts * 2) {
                 tries++;
-                let x = (Math.random() - 0.5) * (areaWidth - 8);
-                let z = (Math.random() - 0.5) * (areaLength - 8);
+                let x = (Math.random() - 0.5) * (areaWidth - 12);
+                let z = (Math.random() - 0.5) * (areaLength - 12);
 
-                if (isZoneBlocked(x, z, 0.2)) continue;
+                if (isZoneBlocked(x, z, 0.5)) continue;
 
-                dummy.position.set(x, 0.06, z);
-                const s = 0.9 + Math.random() * 0.45;
-                dummy.scale.set(s, s * 0.85, s);
+                dummy.position.set(x, 0.03, z);
+                const s = 0.8 + Math.random() * 0.4;
+                dummy.scale.set(s, s * 0.8, s);
                 dummy.updateMatrix();
                 
                 chestnutInstances.setMatrixAt(created, dummy.matrix);
@@ -465,11 +467,11 @@
                 return;
             }
             const bagMesh = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.35, 0.45, 0.85, 8),
+                new THREE.CylinderGeometry(0.4, 0.5, 0.9, 8),
                 new THREE.MeshStandardMaterial({ color: 0xc2a378, roughness: 0.9 })
             );
             bagMesh.position.copy(player.position);
-            bagMesh.position.y = 0.42;
+            bagMesh.position.y = 0.45;
             scene.add(bagMesh);
             bags.push({ mesh: bagMesh, count: inventory });
             showToast(`Мішок поставлено (каштанів: ${inventory})`);
@@ -480,7 +482,7 @@
         function throwIntoChest() {
             let totalToProcess = inventory;
             for (let i = bags.length - 1; i >= 0; i--) {
-                if (player.position.distanceTo(bags[i].mesh.position) < 9.0) {
+                if (player.position.distanceTo(bags[i].mesh.position) < 12.0) {
                     totalToProcess += bags[i].count;
                     scene.remove(bags[i].mesh);
                     bags.splice(i, 1);
@@ -498,6 +500,19 @@
             updateUI();
             saveGameData();
             showToast(`Здано ${totalToProcess} шт. Зароблено: $${earned.toFixed(2)}!`);
+        }
+
+        function openPCUpgrades() {
+            let cost = maxInventory * 15;
+            if (money >= cost) {
+                money -= cost;
+                maxInventory += 5;
+                updateUI();
+                saveGameData();
+                showToast(`Покращення успішне! Макс. інвентар: ${maxInventory}`, "#4CAF50");
+            } else {
+                showToast(`Не вистачає грошей! Потрібно: $${cost.toFixed(2)}`, "#f44336");
+            }
         }
 
         function setupTouchControls() {
@@ -592,8 +607,7 @@
             let newX = player.position.x - moveDir.z * 0.16 * fwd.x + moveDir.x * 0.16 * right.x;
             let newZ = player.position.z - moveDir.z * 0.16 * fwd.z + moveDir.x * 0.16 * right.z;
 
-            // Обмеження парканом та захист від заходження у воду ставка
-            const margin = 2.5;
+            const margin = 3.5;
             newX = Math.max(-areaWidth / 2 + margin, Math.min(areaWidth / 2 - margin, newX));
             newZ = Math.max(-areaLength / 2 + margin, Math.min(areaLength / 2 - margin, newZ));
 
@@ -602,42 +616,47 @@
                 player.position.z = newZ;
             }
 
-            // Збір каштанів
+            // Збір каштанів з миттєвим оновленням UI
             if (inventory < maxInventory) {
-                let updated = false;
+                let collectedAny = false;
                 for (let i = 0; i < chestnutData.length; i++) {
                     let c = chestnutData[i];
                     if (!c.collected) {
-                        if (Math.abs(player.position.x - c.x) < 1.3 && Math.abs(player.position.z - c.z) < 1.3) {
-                            if (Math.hypot(player.position.x - c.x, player.position.z - c.z) < 1.3) {
-                                c.collected = true;
-                                inventory++;
-                                dummyMatrix.position.set(0, -999, 0);
-                                dummyMatrix.scale.set(0, 0, 0);
-                                dummyMatrix.updateMatrix();
-                                chestnutInstances.setMatrixAt(i, dummyMatrix.matrix);
-                                updated = true;
-                                if (inventory >= maxInventory) break;
-                            }
+                        if (Math.hypot(player.position.x - c.x, player.position.z - c.z) < 1.4) {
+                            c.collected = true;
+                            inventory++;
+                            collectedAny = true;
+                            
+                            dummyMatrix.position.set(0, -999, 0);
+                            dummyMatrix.scale.set(0, 0, 0);
+                            dummyMatrix.updateMatrix();
+                            chestnutInstances.setMatrixAt(i, dummyMatrix.matrix);
+
+                            if (inventory >= maxInventory) break;
                         }
                     }
                 }
-                if (updated) {
+                if (collectedAny) {
                     chestnutInstances.instanceMatrix.needsUpdate = true;
                     updateUI();
                 }
             }
 
-            // Кнопка здачі біля будинку
+            // Інтерактивні кнопки біля будинку
             const actionBtn = document.getElementById('btn-action');
-            if (player.position.distanceTo(housePos) < 13.0) {
+            const pcBtn = document.getElementById('btn-pc');
+            
+            if (player.position.distanceTo(housePos) < 16.0) {
                 actionBtn.style.display = "block";
+                pcBtn.style.display = "block";
+                pcBtn.textContent = `Комп'ютер (Ціна: $${(maxInventory * 15).toFixed(2)})`;
             } else {
                 actionBtn.style.display = "none";
+                pcBtn.style.display = "none";
             }
 
-            // Ігровий час
-            gameTime += 0.15;
+            // Час уповільнено вдвічі (швидкість збільшення зменшена з 0.15 до 0.075)
+            gameTime += 0.075;
             if (gameTime >= 1440) gameTime = 0;
             const h = Math.floor(gameTime / 60), m = Math.floor(gameTime % 60);
             document.getElementById('time-display').textContent = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
